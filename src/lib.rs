@@ -20,7 +20,7 @@ near_sdk::setup_alloc!();
 const NO_DEPOSIT: Balance = 0;
 
 const TGAS: Gas = 10u64.pow(12);
-const GAS_FOR_PROMISE: Gas = 5 * TGAS;
+const GAS_FOR_PROMISE: Gas = 10 * TGAS;
 
 pub type DurationSec = u32;
 
@@ -78,6 +78,22 @@ impl Contract {
     }
 
     #[private]
+    pub fn remove_oracle(&mut self, account_id: ValidAccountId) {
+        assert!(self.oracles.remove(account_id.as_ref()).is_some());
+    }
+
+    /// Remove price data from removed oracle.
+    pub fn clean_oracle_data(&mut self, account_id: ValidAccountId, asset_ids: Vec<AssetId>) {
+        assert!(self.internal_get_oracle(account_id.as_ref()).is_none());
+        for asset_id in asset_ids {
+            let mut asset = self.internal_get_asset(&asset_id).expect("Unknown asset");
+            if asset.remove_report(account_id.as_ref()) {
+                self.internal_set_asset(&asset_id, asset);
+            }
+        }
+    }
+
+    #[private]
     pub fn add_asset(&mut self, asset_id: AssetId) {
         assert!(self.internal_get_asset(&asset_id).is_none());
         self.internal_set_asset(&asset_id, Asset::new());
@@ -85,6 +101,22 @@ impl Contract {
 
     pub fn get_oracle(&self, account_id: ValidAccountId) -> Option<Oracle> {
         self.internal_get_oracle(account_id.as_ref())
+    }
+
+    pub fn get_oracles(
+        &self,
+        from_index: Option<u64>,
+        limit: Option<u64>,
+    ) -> Vec<(AccountId, Oracle)> {
+        unordered_map_pagination(&self.oracles, from_index, limit)
+    }
+
+    pub fn get_assets(
+        &self,
+        from_index: Option<u64>,
+        limit: Option<u64>,
+    ) -> Vec<(AccountId, Asset)> {
+        unordered_map_pagination(&self.assets, from_index, limit)
     }
 
     pub fn get_asset(&self, asset_id: AssetId) -> Option<Asset> {
@@ -112,24 +144,25 @@ impl Contract {
 
     pub fn report_prices(&mut self, prices: Vec<AssetPrice>) {
         assert!(!prices.is_empty());
-        let account_id = env::predecessor_account_id();
+        let oracle_id = env::predecessor_account_id();
         let timestamp = env::block_timestamp();
 
         // Oracle stats
-        let mut oracle = self
-            .internal_get_oracle(&account_id)
-            .expect("Not an oracle");
+        let mut oracle = self.internal_get_oracle(&oracle_id).expect("Not an oracle");
         oracle.last_report = timestamp;
         oracle.price_reports += prices.len() as u64;
-        self.internal_set_oracle(&account_id, oracle);
+        self.internal_set_oracle(&oracle_id, oracle);
 
         // Updating prices
         for AssetPrice { asset_id, price } in prices {
             price.assert_valid();
             let mut asset = self.internal_get_asset(&asset_id).expect("Unknown asset");
-            asset
-                .prices
-                .insert(account_id.clone(), TimedPrice { timestamp, price });
+            asset.remove_report(&oracle_id);
+            asset.add_report(Report {
+                oracle_id: oracle_id.clone(),
+                timestamp,
+                price,
+            });
             self.internal_set_asset(&asset_id, asset);
         }
     }
