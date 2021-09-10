@@ -15,21 +15,21 @@ pub struct Report {
     pub oracle_id: AccountId,
     #[serde(with = "u64_dec_format")]
     pub timestamp: Timestamp,
-    pub price: Fraction,
+    pub price: Price,
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct AssetPrice {
     pub asset_id: AssetId,
-    pub price: Fraction,
+    pub price: Price,
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct AssetOptionalPrice {
     pub asset_id: AssetId,
-    pub price: Option<Fraction>,
+    pub price: Option<Price>,
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -68,7 +68,7 @@ impl Asset {
         self.reports.len() != initial_len
     }
 
-    pub fn median_price(&self, recency_duration: Duration) -> Option<Fraction> {
+    pub fn median_price(&self, recency_duration: Duration) -> Option<Price> {
         let timestamp_cut = env::block_timestamp().saturating_sub(recency_duration);
         let mut recent_reports: Vec<_> = self
             .reports

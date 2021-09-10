@@ -5,39 +5,51 @@ uint::construct_uint! {
     pub struct U256(4);
 }
 
+const MAX_U128_DECIMALS: u8 = 38;
+const MAX_VALID_DECIMALS: u8 = 77;
+
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, Copy)]
 #[serde(crate = "near_sdk::serde")]
-pub struct Fraction {
+pub struct Price {
     #[serde(with = "u128_dec_format")]
-    numerator: Balance,
-    #[serde(with = "u128_dec_format")]
-    denominator: Balance,
+    multiplier: Balance,
+    decimals: u8,
 }
 
-impl Fraction {
+impl Price {
     pub fn assert_valid(&self) {
-        assert_ne!(self.denominator, 0);
+        assert!(self.decimals <= MAX_VALID_DECIMALS);
     }
 }
 
-impl PartialEq<Self> for Fraction {
+impl PartialEq<Self> for Price {
     fn eq(&self, other: &Self) -> bool {
         self.partial_cmp(other) == Some(Ordering::Equal)
     }
 }
 
-impl PartialOrd for Fraction {
+impl PartialOrd for Price {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.decimals < other.decimals {
+            return Some(other.cmp(self).reverse());
+        }
+
+        let decimals_diff = self.decimals - other.decimals;
+
+        if decimals_diff > MAX_U128_DECIMALS {
+            return Some(Ordering::Greater);
+        }
+
         Some(
-            (U256::from(self.numerator) * U256::from(other.denominator))
-                .cmp(&(U256::from(self.denominator) * U256::from(other.numerator))),
+            (U256::from(self.multiplier) * U256::from(10u128.pow(decimals_diff as u32)))
+                .cmp(&U256::from(other.multiplier)),
         )
     }
 }
 
-impl Eq for Fraction {}
+impl Eq for Price {}
 
-impl Ord for Fraction {
+impl Ord for Price {
     fn cmp(&self, other: &Self) -> Ordering {
         self.partial_cmp(other).unwrap()
     }
