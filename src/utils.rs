@@ -1,10 +1,6 @@
 use crate::*;
 use std::cmp::Ordering;
 
-uint::construct_uint! {
-    pub struct U256(4);
-}
-
 const MAX_U128_DECIMALS: u8 = 38;
 const MAX_VALID_DECIMALS: u8 = 77;
 
@@ -15,6 +11,14 @@ pub struct Price {
     multiplier: Balance,
     decimals: u8,
 }
+
+// 5 NEAR = 5 * 10**24 "wrap.near"
+// 50 DAI = 50 * 10**18 "dai.bridge.near"
+
+// Price NEAR { multiplier: 1000, decimals: 26 }
+// 5 NEAR in USD = 5 * 10**24 * 1000 / 10**(26 - 18) = 50 * 10**18
+// Price DAI { multiplier: 101, decimals: 20 }
+// 50 DAI in USD = 50 * 10**18 * 101 / 10**(20 - 18) = 505 * 10**17
 
 impl Price {
     pub fn assert_valid(&self) {
@@ -37,13 +41,17 @@ impl PartialOrd for Price {
         let decimals_diff = self.decimals - other.decimals;
 
         if decimals_diff > MAX_U128_DECIMALS {
-            return Some(Ordering::Greater);
+            return Some(Ordering::Less);
         }
 
-        Some(
-            (U256::from(self.multiplier) * U256::from(10u128.pow(decimals_diff as u32)))
-                .cmp(&U256::from(other.multiplier)),
-        )
+        if let Some(om) = other
+            .multiplier
+            .checked_mul(10u128.pow(decimals_diff as u32))
+        {
+            Some(self.multiplier.cmp(&om))
+        } else {
+            Some(Ordering::Less)
+        }
     }
 }
 

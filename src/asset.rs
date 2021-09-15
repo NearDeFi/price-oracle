@@ -1,5 +1,4 @@
 use crate::*;
-use near_sdk::Duration;
 
 pub type AssetId = String;
 
@@ -68,14 +67,17 @@ impl Asset {
         self.reports.len() != initial_len
     }
 
-    pub fn median_price(&self, recency_duration: Duration) -> Option<Price> {
-        let timestamp_cut = env::block_timestamp().saturating_sub(recency_duration);
+    pub fn median_price(
+        &self,
+        timestamp_cut: Timestamp,
+        min_num_recent_reports: usize,
+    ) -> Option<Price> {
         let mut recent_reports: Vec<_> = self
             .reports
             .iter()
             .filter(|rp| rp.timestamp >= timestamp_cut)
             .collect();
-        if recent_reports.is_empty() {
+        if recent_reports.len() < min_num_recent_reports {
             return None;
         }
         let index = recent_reports.len() / 2;

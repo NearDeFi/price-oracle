@@ -124,8 +124,12 @@ impl Contract {
     }
 
     pub fn get_price_data(&self, asset_ids: Vec<AssetId>) -> PriceData {
+        let timestamp = env::block_timestamp();
+        let timestamp_cut = timestamp.saturating_sub(to_nano(self.recency_duration_sec));
+        let min_num_recent_reports = std::cmp::max(1, (self.oracles.len() + 1) / 2) as usize;
+
         PriceData {
-            timestamp: env::block_timestamp(),
+            timestamp,
             recency_duration_sec: self.recency_duration_sec,
             prices: asset_ids
                 .into_iter()
@@ -134,7 +138,7 @@ impl Contract {
                     AssetOptionalPrice {
                         asset_id,
                         price: asset.and_then(|asset| {
-                            asset.median_price(to_nano(self.recency_duration_sec))
+                            asset.median_price(timestamp_cut, min_num_recent_reports)
                         }),
                     }
                 })
