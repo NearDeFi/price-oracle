@@ -146,6 +146,39 @@ impl Contract {
         }
     }
 
+    /// Returns price data for a given oracle ID and given list of asset IDs.
+    pub fn get_oracle_price_data(
+        &self,
+        account_id: ValidAccountId,
+        asset_ids: Vec<AssetId>,
+    ) -> PriceData {
+        let timestamp = env::block_timestamp();
+        let timestamp_cut = timestamp.saturating_sub(to_nano(self.recency_duration_sec));
+
+        let oracle_id: AccountId = account_id.into();
+        PriceData {
+            timestamp,
+            recency_duration_sec: self.recency_duration_sec,
+            prices: asset_ids
+                .into_iter()
+                .map(|asset_id| {
+                    let asset = self.internal_get_asset(&asset_id);
+                    AssetOptionalPrice {
+                        asset_id,
+                        price: asset.and_then(|asset| {
+                            asset
+                                .reports
+                                .into_iter()
+                                .find(|report| report.oracle_id == oracle_id)
+                                .filter(|report| report.timestamp >= timestamp_cut)
+                                .map(|report| report.price)
+                        }),
+                    }
+                })
+                .collect(),
+        }
+    }
+
     pub fn report_prices(&mut self, prices: Vec<AssetPrice>) {
         assert!(!prices.is_empty());
         let oracle_id = env::predecessor_account_id();
