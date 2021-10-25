@@ -11,8 +11,8 @@ use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::ValidAccountId;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{
-    assert_one_yocto, env, ext_contract, near_bindgen, AccountId, Balance, BorshStorageKey, Gas,
-    PanicOnDefault, Promise, Timestamp,
+    assert_one_yocto, env, ext_contract, near_bindgen, AccountId, Balance, BorshStorageKey,
+    Duration, Gas, PanicOnDefault, Promise, Timestamp,
 };
 
 near_sdk::setup_alloc!();
@@ -21,6 +21,9 @@ const NO_DEPOSIT: Balance = 0;
 
 const TGAS: Gas = 10u64.pow(12);
 const GAS_FOR_PROMISE: Gas = 10 * TGAS;
+
+const NEAR_CLAIM: Balance = 25 * 10u128.pow(23);
+const NEAR_CLAIM_DURATION: Duration = 24 * 60 * 60 * 10u64.pow(9);
 
 pub type DurationSec = u32;
 
@@ -226,6 +229,16 @@ impl Contract {
             NO_DEPOSIT,
             remaining_gas - GAS_FOR_PROMISE,
         )
+    }
+
+    pub fn claim_near(&mut self) -> Promise {
+        let oracle_id = env::predecessor_account_id();
+        let mut oracle = self.internal_get_oracle(&oracle_id).expect("Only oracles");
+        let timestamp = env::block_timestamp();
+        assert!(oracle.last_near_claim + NEAR_CLAIM_DURATION <= timestamp);
+        oracle.last_near_claim = timestamp;
+        self.internal_set_oracle(&oracle_id, oracle);
+        Promise::new(oracle_id).transfer(NEAR_CLAIM)
     }
 }
 
