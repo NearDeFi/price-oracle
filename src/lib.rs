@@ -191,6 +191,12 @@ impl Contract {
         let mut oracle = self.internal_get_oracle(&oracle_id).expect("Not an oracle");
         oracle.last_report = timestamp;
         oracle.price_reports += prices.len() as u64;
+
+        if oracle.last_near_claim + NEAR_CLAIM_DURATION <= timestamp {
+            oracle.last_near_claim = timestamp;
+            Promise::new(oracle_id.clone()).transfer(NEAR_CLAIM);
+        }
+
         self.internal_set_oracle(&oracle_id, oracle);
 
         // Updating prices
@@ -229,16 +235,6 @@ impl Contract {
             NO_DEPOSIT,
             remaining_gas - GAS_FOR_PROMISE,
         )
-    }
-
-    pub fn claim_near(&mut self) -> Promise {
-        let oracle_id = env::predecessor_account_id();
-        let mut oracle = self.internal_get_oracle(&oracle_id).expect("Only oracles");
-        let timestamp = env::block_timestamp();
-        assert!(oracle.last_near_claim + NEAR_CLAIM_DURATION <= timestamp);
-        oracle.last_near_claim = timestamp;
-        self.internal_set_oracle(&oracle_id, oracle);
-        Promise::new(oracle_id).transfer(NEAR_CLAIM)
     }
 }
 
