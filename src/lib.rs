@@ -150,18 +150,22 @@ impl Contract {
     }
 
     /// Returns price data for a given oracle ID and given list of asset IDs.
+    /// If recency_duration_sec is given, then it uses the given duration instead of the one from
+    /// the contract config.
     pub fn get_oracle_price_data(
         &self,
         account_id: ValidAccountId,
         asset_ids: Vec<AssetId>,
+        recency_duration_sec: Option<DurationSec>,
     ) -> PriceData {
         let timestamp = env::block_timestamp();
-        let timestamp_cut = timestamp.saturating_sub(to_nano(self.recency_duration_sec));
+        let recency_duration_sec = recency_duration_sec.unwrap_or(self.recency_duration_sec);
+        let timestamp_cut = timestamp.saturating_sub(to_nano(recency_duration_sec));
 
         let oracle_id: AccountId = account_id.into();
         PriceData {
             timestamp,
-            recency_duration_sec: self.recency_duration_sec,
+            recency_duration_sec,
             prices: asset_ids
                 .into_iter()
                 .map(|asset_id| {
