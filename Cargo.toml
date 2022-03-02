@@ -1,6 +1,6 @@
 [package]
 name = "price-oracle"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Eugene The Dream <ek@proximity.dev>"]
 edition = "2018"
 
