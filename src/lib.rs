@@ -22,7 +22,7 @@ const NO_DEPOSIT: Balance = 0;
 const TGAS: Gas = 10u64.pow(12);
 const GAS_FOR_PROMISE: Gas = 10 * TGAS;
 
-const NEAR_CLAIM: Balance = 30 * 10u128.pow(23);
+const NEAR_CLAIM: Balance = 50 * 10u128.pow(23);
 const NEAR_CLAIM_DURATION: Duration = 24 * 60 * 60 * 10u64.pow(9);
 
 pub type DurationSec = u32;
