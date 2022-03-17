@@ -1,5 +1,7 @@
 mod asset;
 mod oracle;
+mod owner;
+mod upgrade;
 mod utils;
 
 use crate::asset::*;
@@ -8,21 +10,17 @@ use crate::utils::*;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
-use near_sdk::json_types::ValidAccountId;
+use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{
     assert_one_yocto, env, ext_contract, near_bindgen, AccountId, Balance, BorshStorageKey,
     Duration, Gas, PanicOnDefault, Promise, Timestamp,
 };
 
-near_sdk::setup_alloc!();
-
 const NO_DEPOSIT: Balance = 0;
 
-const TGAS: Gas = 10u64.pow(12);
-const GAS_FOR_PROMISE: Gas = 10 * TGAS;
+const GAS_FOR_PROMISE: Gas = Gas(Gas::ONE_TERA.0 * 10);
 
-const NEAR_CLAIM: Balance = 50 * 10u128.pow(23);
 const NEAR_CLAIM_DURATION: Duration = 24 * 60 * 60 * 10u64.pow(9);
 
 pub type DurationSec = u32;
@@ -41,6 +39,10 @@ pub struct Contract {
     pub assets: UnorderedMap<AssetId, VAsset>,
 
     pub recency_duration_sec: DurationSec,
+
+    pub owner_id: AccountId,
+
+    pub near_claim_amount: Balance,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -61,49 +63,33 @@ pub trait ExtPriceReceiver {
 #[near_bindgen]
 impl Contract {
     #[init]
-    pub fn new(recency_duration_sec: DurationSec) -> Self {
+    pub fn new(
+        recency_duration_sec: DurationSec,
+        owner_id: AccountId,
+        near_claim_amount: U128,
+    ) -> Self {
         Self {
             oracles: UnorderedMap::new(StorageKey::Oracles),
             assets: UnorderedMap::new(StorageKey::Assets),
             recency_duration_sec,
+            owner_id,
+            near_claim_amount: near_claim_amount.into(),
         }
     }
 
-    #[private]
-    pub fn set_recency_duration_sec(&mut self, recency_duration_sec: DurationSec) {
-        self.recency_duration_sec = recency_duration_sec;
-    }
-
-    #[private]
-    pub fn add_oracle(&mut self, account_id: ValidAccountId) {
-        assert!(self.internal_get_oracle(account_id.as_ref()).is_none());
-        self.internal_set_oracle(account_id.as_ref(), Oracle::new());
-    }
-
-    #[private]
-    pub fn remove_oracle(&mut self, account_id: ValidAccountId) {
-        assert!(self.oracles.remove(account_id.as_ref()).is_some());
-    }
-
     /// Remove price data from removed oracle.
-    pub fn clean_oracle_data(&mut self, account_id: ValidAccountId, asset_ids: Vec<AssetId>) {
-        assert!(self.internal_get_oracle(account_id.as_ref()).is_none());
+    pub fn clean_oracle_data(&mut self, account_id: AccountId, asset_ids: Vec<AssetId>) {
+        assert!(self.internal_get_oracle(&account_id).is_none());
         for asset_id in asset_ids {
             let mut asset = self.internal_get_asset(&asset_id).expect("Unknown asset");
-            if asset.remove_report(account_id.as_ref()) {
+            if asset.remove_report(&account_id) {
                 self.internal_set_asset(&asset_id, asset);
             }
         }
     }
 
-    #[private]
-    pub fn add_asset(&mut self, asset_id: AssetId) {
-        assert!(self.internal_get_asset(&asset_id).is_none());
-        self.internal_set_asset(&asset_id, Asset::new());
-    }
-
-    pub fn get_oracle(&self, account_id: ValidAccountId) -> Option<Oracle> {
-        self.internal_get_oracle(account_id.as_ref())
+    pub fn get_oracle(&self, account_id: AccountId) -> Option<Oracle> {
+        self.internal_get_oracle(&account_id)
     }
 
     pub fn get_oracles(
@@ -114,11 +100,7 @@ impl Contract {
         unordered_map_pagination(&self.oracles, from_index, limit)
     }
 
-    pub fn get_assets(
-        &self,
-        from_index: Option<u64>,
-        limit: Option<u64>,
-    ) -> Vec<(AccountId, Asset)> {
+    pub fn get_assets(&self, from_index: Option<u64>, limit: Option<u64>) -> Vec<(AssetId, Asset)> {
         unordered_map_pagination(&self.assets, from_index, limit)
     }
 
@@ -154,7 +136,7 @@ impl Contract {
     /// the contract config.
     pub fn get_oracle_price_data(
         &self,
-        account_id: ValidAccountId,
+        account_id: AccountId,
         asset_ids: Vec<AssetId>,
         recency_duration_sec: Option<DurationSec>,
     ) -> PriceData {
@@ -198,7 +180,7 @@ impl Contract {
 
         if oracle.last_near_claim + NEAR_CLAIM_DURATION <= timestamp {
             oracle.last_near_claim = timestamp;
-            Promise::new(oracle_id.clone()).transfer(NEAR_CLAIM);
+            Promise::new(oracle_id.clone()).transfer(self.near_claim_amount);
         }
 
         self.internal_set_oracle(&oracle_id, oracle);
@@ -220,7 +202,7 @@ impl Contract {
     #[payable]
     pub fn oracle_call(
         &mut self,
-        receiver_id: ValidAccountId,
+        receiver_id: AccountId,
         asset_ids: Vec<AssetId>,
         msg: String,
     ) -> Promise {
@@ -235,7 +217,7 @@ impl Contract {
             sender_id,
             price_data,
             msg,
-            receiver_id.as_ref(),
+            receiver_id,
             NO_DEPOSIT,
             remaining_gas - GAS_FOR_PROMISE,
         )
