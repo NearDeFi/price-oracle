@@ -5,26 +5,7 @@ impl Contract {
     #[private]
     #[init(ignore_state)]
     pub fn migrate_state() -> Self {
-        #[derive(BorshDeserialize)]
-        pub struct OldContract {
-            pub oracles: UnorderedMap<AccountId, VOracle>,
-            pub assets: UnorderedMap<AssetId, VAsset>,
-            pub recency_duration_sec: DurationSec,
-        }
-
-        let OldContract {
-            oracles,
-            assets,
-            recency_duration_sec,
-        } = env::state_read().expect("Failed to read old contract state");
-
-        Self {
-            oracles,
-            assets,
-            recency_duration_sec,
-            owner_id: env::current_account_id(),
-            near_claim_amount: 50 * 10u128.pow(23),
-        }
+        env::state_read().unwrap()
     }
 
     /// Returns semver of this contract.
