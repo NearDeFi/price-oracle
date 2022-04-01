@@ -108,7 +108,8 @@ impl Contract {
         self.internal_get_asset(&asset_id)
     }
 
-    pub fn get_price_data(&self, asset_ids: Vec<AssetId>) -> PriceData {
+    pub fn get_price_data(&self, asset_ids: Option<Vec<AssetId>>) -> PriceData {
+        let asset_ids = asset_ids.unwrap_or_else(|| self.assets.keys().collect());
         let timestamp = env::block_timestamp();
         let timestamp_cut = timestamp.saturating_sub(to_nano(self.recency_duration_sec));
         let min_num_recent_reports = std::cmp::max(1, (self.oracles.len() + 1) / 2) as usize;
@@ -137,9 +138,10 @@ impl Contract {
     pub fn get_oracle_price_data(
         &self,
         account_id: AccountId,
-        asset_ids: Vec<AssetId>,
+        asset_ids: Option<Vec<AssetId>>,
         recency_duration_sec: Option<DurationSec>,
     ) -> PriceData {
+        let asset_ids = asset_ids.unwrap_or_else(|| self.assets.keys().collect());
         let timestamp = env::block_timestamp();
         let recency_duration_sec = recency_duration_sec.unwrap_or(self.recency_duration_sec);
         let timestamp_cut = timestamp.saturating_sub(to_nano(recency_duration_sec));
@@ -203,7 +205,7 @@ impl Contract {
     pub fn oracle_call(
         &mut self,
         receiver_id: AccountId,
-        asset_ids: Vec<AssetId>,
+        asset_ids: Option<Vec<AssetId>>,
         msg: String,
     ) -> Promise {
         self.assert_well_paid();
