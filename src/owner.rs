@@ -33,6 +33,43 @@ impl Contract {
         self.internal_set_asset(&asset_id, Asset::new());
     }
 
+    #[payable]
+    pub fn remove_asset(&mut self, asset_id: AssetId) {
+        assert_one_yocto();
+        self.assert_owner();
+        assert!(self.assets.remove(&asset_id).is_some());
+    }
+
+    #[payable]
+    pub fn add_asset_ema(&mut self, asset_id: AssetId, period_sec: DurationSec) {
+        assert_one_yocto();
+        self.assert_owner();
+        let mut asset = self
+            .internal_get_asset(&asset_id)
+            .expect("Missing an asset");
+        if asset.emas.iter().any(|ema| ema.period_sec == period_sec) {
+            panic!("EMA for this period already exists");
+        }
+        asset.emas.push(AssetEma::new(period_sec));
+        self.internal_set_asset(&asset_id, asset);
+    }
+
+    #[payable]
+    pub fn remove_asset_ema(&mut self, asset_id: AssetId, period_sec: DurationSec) {
+        assert_one_yocto();
+        self.assert_owner();
+        let mut asset = self
+            .internal_get_asset(&asset_id)
+            .expect("Missing an asset");
+        let last_num_emas = asset.emas.len();
+        asset.emas.retain(|ema| ema.period_sec != period_sec);
+        assert!(
+            asset.emas.len() < last_num_emas,
+            "EMA for this period doesn't exists"
+        );
+        self.internal_set_asset(&asset_id, asset);
+    }
+
     pub fn get_owner_id(&self) -> AccountId {
         self.owner_id.clone()
     }

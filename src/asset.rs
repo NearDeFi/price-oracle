@@ -6,6 +6,7 @@ pub type AssetId = String;
 #[serde(crate = "near_sdk::serde")]
 pub struct Asset {
     pub reports: Vec<Report>,
+    pub emas: Vec<AssetEma>,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone)]
@@ -33,12 +34,14 @@ pub struct AssetOptionalPrice {
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub enum VAsset {
+    V0(AssetV0),
     Current(Asset),
 }
 
 impl From<VAsset> for Asset {
     fn from(v: VAsset) -> Self {
         match v {
+            VAsset::V0(c) => c.into(),
             VAsset::Current(c) => c,
         }
     }
@@ -54,6 +57,7 @@ impl Asset {
     pub fn new() -> Self {
         Self {
             reports: Vec::new(),
+            emas: Vec::new(),
         }
     }
 
