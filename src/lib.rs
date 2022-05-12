@@ -1,19 +1,23 @@
 mod asset;
+mod ema;
+mod legacy;
 mod oracle;
 mod owner;
 mod upgrade;
 mod utils;
 
-use crate::asset::*;
-use crate::oracle::*;
-use crate::utils::*;
+pub use crate::asset::*;
+pub use crate::ema::*;
+use crate::legacy::*;
+pub use crate::oracle::*;
+pub use crate::utils::*;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{
-    assert_one_yocto, env, ext_contract, near_bindgen, AccountId, Balance, BorshStorageKey,
+    assert_one_yocto, env, ext_contract, log, near_bindgen, AccountId, Balance, BorshStorageKey,
     Duration, Gas, PanicOnDefault, Promise, Timestamp,
 };
 
@@ -120,12 +124,30 @@ impl Contract {
             prices: asset_ids
                 .into_iter()
                 .map(|asset_id| {
-                    let asset = self.internal_get_asset(&asset_id);
-                    AssetOptionalPrice {
-                        asset_id,
-                        price: asset.and_then(|asset| {
-                            asset.median_price(timestamp_cut, min_num_recent_reports)
-                        }),
+                    // EMA for a specific asset, e.g. wrap.near#3600 is 1 hour EMA for wrap.near
+                    if let Some((base_asset_id, period_sec)) = asset_id.split_once('#') {
+                        let period_sec: DurationSec =
+                            period_sec.parse().expect("Failed to parse EMA period");
+                        let asset = self.internal_get_asset(&base_asset_id.to_string());
+                        AssetOptionalPrice {
+                            asset_id,
+                            price: asset.and_then(|asset| {
+                                asset
+                                    .emas
+                                    .into_iter()
+                                    .find(|ema| ema.period_sec == period_sec)
+                                    .filter(|ema| ema.timestamp >= timestamp_cut)
+                                    .and_then(|ema| ema.price)
+                            }),
+                        }
+                    } else {
+                        let asset = self.internal_get_asset(&asset_id);
+                        AssetOptionalPrice {
+                            asset_id,
+                            price: asset.and_then(|asset| {
+                                asset.median_price(timestamp_cut, min_num_recent_reports)
+                            }),
+                        }
                     }
                 })
                 .collect(),
@@ -190,14 +212,30 @@ impl Contract {
         // Updating prices
         for AssetPrice { asset_id, price } in prices {
             price.assert_valid();
-            let mut asset = self.internal_get_asset(&asset_id).expect("Unknown asset");
-            asset.remove_report(&oracle_id);
-            asset.add_report(Report {
-                oracle_id: oracle_id.clone(),
-                timestamp,
-                price,
-            });
-            self.internal_set_asset(&asset_id, asset);
+            if let Some(mut asset) = self.internal_get_asset(&asset_id) {
+                asset.remove_report(&oracle_id);
+                asset.add_report(Report {
+                    oracle_id: oracle_id.clone(),
+                    timestamp,
+                    price,
+                });
+                if !asset.emas.is_empty() {
+                    let timestamp_cut =
+                        timestamp.saturating_sub(to_nano(self.recency_duration_sec));
+                    let min_num_recent_reports =
+                        std::cmp::max(1, (self.oracles.len() + 1) / 2) as usize;
+                    if let Some(median_price) =
+                        asset.median_price(timestamp_cut, min_num_recent_reports)
+                    {
+                        for ema in asset.emas.iter_mut() {
+                            ema.recompute(median_price, timestamp);
+                        }
+                    }
+                }
+                self.internal_set_asset(&asset_id, asset);
+            } else {
+                log!("Warning! Unknown asset ID: {}", asset_id);
+            }
         }
     }
 

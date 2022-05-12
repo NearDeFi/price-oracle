@@ -5,11 +5,12 @@ const MAX_U128_DECIMALS: u8 = 38;
 const MAX_VALID_DECIMALS: u8 = 77;
 
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, Copy)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Debug))]
 #[serde(crate = "near_sdk::serde")]
 pub struct Price {
     #[serde(with = "u128_dec_format")]
-    multiplier: Balance,
-    decimals: u8,
+    pub multiplier: Balance,
+    pub decimals: u8,
 }
 
 // 5 NEAR = 5 * 10**24 "wrap.near"
