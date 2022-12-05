@@ -3,6 +3,7 @@ mod ema;
 mod legacy;
 mod oracle;
 mod owner;
+mod governance;
 mod upgrade;
 mod utils;
 
@@ -85,7 +86,7 @@ impl Contract {
     pub fn clean_oracle_data(&mut self, account_id: AccountId, asset_ids: Vec<AssetId>) {
         assert!(self.internal_get_oracle(&account_id).is_none());
         for asset_id in asset_ids {
-            let mut asset = self.internal_get_asset(&asset_id).expect("Unknown asset");
+            let mut asset = self.internal_get_asset(&asset_id, false).expect("Unknown asset");
             if asset.remove_report(&account_id) {
                 self.internal_set_asset(&asset_id, asset);
             }
@@ -109,7 +110,7 @@ impl Contract {
     }
 
     pub fn get_asset(&self, asset_id: AssetId) -> Option<Asset> {
-        self.internal_get_asset(&asset_id)
+        self.internal_get_asset(&asset_id, true)
     }
 
     pub fn get_price_data(&self, asset_ids: Option<Vec<AssetId>>) -> PriceData {
@@ -128,7 +129,7 @@ impl Contract {
                     if let Some((base_asset_id, period_sec)) = asset_id.split_once('#') {
                         let period_sec: DurationSec =
                             period_sec.parse().expect("Failed to parse EMA period");
-                        let asset = self.internal_get_asset(&base_asset_id.to_string());
+                        let asset = self.internal_get_asset(&base_asset_id.to_string(), true);
                         AssetOptionalPrice {
                             asset_id,
                             price: asset.and_then(|asset| {
@@ -141,7 +142,7 @@ impl Contract {
                             }),
                         }
                     } else {
-                        let asset = self.internal_get_asset(&asset_id);
+                        let asset = self.internal_get_asset(&asset_id, true);
                         AssetOptionalPrice {
                             asset_id,
                             price: asset.and_then(|asset| {
@@ -175,7 +176,7 @@ impl Contract {
             prices: asset_ids
                 .into_iter()
                 .map(|asset_id| {
-                    let asset = self.internal_get_asset(&asset_id);
+                    let asset = self.internal_get_asset(&asset_id, true);
                     AssetOptionalPrice {
                         asset_id,
                         price: asset.and_then(|asset| {
@@ -212,7 +213,7 @@ impl Contract {
         // Updating prices
         for AssetPrice { asset_id, price } in prices {
             price.assert_valid();
-            if let Some(mut asset) = self.internal_get_asset(&asset_id) {
+            if let Some(mut asset) = self.internal_get_asset(&asset_id, false) {
                 asset.remove_report(&oracle_id);
                 asset.add_report(Report {
                     oracle_id: oracle_id.clone(),
