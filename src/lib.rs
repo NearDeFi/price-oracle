@@ -163,34 +163,41 @@ impl Contract {
         account_id: AccountId,
         asset_ids: Option<Vec<AssetId>>,
         recency_duration_sec: Option<DurationSec>,
-    ) -> PriceData {
+    ) -> Vec<AssetOptionalPriceTimeStamp> {
         let asset_ids = asset_ids.unwrap_or_else(|| self.assets.keys().collect());
         let timestamp = env::block_timestamp();
         let recency_duration_sec = recency_duration_sec.unwrap_or(self.recency_duration_sec);
         let timestamp_cut = timestamp.saturating_sub(to_nano(recency_duration_sec));
 
         let oracle_id: AccountId = account_id.into();
-        PriceData {
-            timestamp,
-            recency_duration_sec,
-            prices: asset_ids
-                .into_iter()
-                .map(|asset_id| {
-                    let asset = self.internal_get_asset(&asset_id, true);
-                    AssetOptionalPrice {
+
+        asset_ids
+            .into_iter()
+            .map(|asset_id| {
+                let asset = self.internal_get_asset(&asset_id, false);
+                let report = asset.and_then(|asset| {
+                    asset
+                        .reports
+                        .into_iter()
+                        .find(|report| report.oracle_id == oracle_id)
+                        .filter(|report| report.timestamp >= timestamp_cut)
+                });
+
+                if let Some(report) = report {
+                    AssetOptionalPriceTimeStamp {
                         asset_id,
-                        price: asset.and_then(|asset| {
-                            asset
-                                .reports
-                                .into_iter()
-                                .find(|report| report.oracle_id == oracle_id)
-                                .filter(|report| report.timestamp >= timestamp_cut)
-                                .map(|report| report.price)
-                        }),
+                        price: Some(report.price),
+                        timestamp: Some(report.timestamp),
                     }
-                })
-                .collect(),
-        }
+                } else {
+                    AssetOptionalPriceTimeStamp {
+                        asset_id,
+                        price: None,
+                        timestamp: None,
+                    }
+                }
+            })
+            .collect()
     }
 
     pub fn report_prices(&mut self, prices: Vec<AssetPrice>) {
