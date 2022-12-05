@@ -40,6 +40,14 @@ pub struct AssetOptionalPrice {
     pub price: Option<Price>,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct AssetOptionalPriceTimeStamp {
+    pub asset_id: AssetId,
+    pub price: Option<Price>,
+    pub timestamp: Option<Timestamp>
+}
+
 #[derive(BorshSerialize, BorshDeserialize)]
 pub enum VAsset {
     V0(AssetV0),
