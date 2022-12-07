@@ -42,10 +42,11 @@ pub struct AssetOptionalPrice {
 
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
-pub struct AssetOptionalPriceTimeStamp {
+pub struct AssetOptionalValidatorPrice {
     pub asset_id: AssetId,
     pub price: Option<Price>,
-    pub timestamp: Option<Timestamp>
+    pub timestamp: Option<Timestamp>,
+    pub status: Option<AssetStatus>
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -137,6 +138,15 @@ impl Contract {
         }
         else {
             log!("Warning! Unknown asset ID: {}", asset_id);
+        }
+    }
+
+    pub fn internal_get_asset_status(&self, asset_id: &AssetId) -> Option<AssetStatus>{
+        if let Some(v_asset) =self.assets.get(asset_id) {
+            Some(Asset::from(v_asset).status)
+        }
+        else {
+            None
         }
     }
 }

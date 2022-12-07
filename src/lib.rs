@@ -163,7 +163,7 @@ impl Contract {
         account_id: AccountId,
         asset_ids: Option<Vec<AssetId>>,
         recency_duration_sec: Option<DurationSec>,
-    ) -> Vec<AssetOptionalPriceTimeStamp> {
+    ) -> Vec<AssetOptionalValidatorPrice> {
         let asset_ids = asset_ids.unwrap_or_else(|| self.assets.keys().collect());
         let timestamp = env::block_timestamp();
         let recency_duration_sec = recency_duration_sec.unwrap_or(self.recency_duration_sec);
@@ -183,17 +183,20 @@ impl Contract {
                         .filter(|report| report.timestamp >= timestamp_cut)
                 });
 
+                let status = self.internal_get_asset_status(&asset_id);
                 if let Some(report) = report {
-                    AssetOptionalPriceTimeStamp {
+                    AssetOptionalValidatorPrice {
                         asset_id,
                         price: Some(report.price),
                         timestamp: Some(report.timestamp),
+                        status
                     }
                 } else {
-                    AssetOptionalPriceTimeStamp {
+                    AssetOptionalValidatorPrice {
                         asset_id,
                         price: None,
                         timestamp: None,
+                        status
                     }
                 }
             })
