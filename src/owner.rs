@@ -29,7 +29,7 @@ impl Contract {
     pub fn add_asset(&mut self, asset_id: AssetId) {
         assert_one_yocto();
         self.assert_owner();
-        assert!(self.internal_get_asset(&asset_id).is_none());
+        assert!(self.internal_get_asset(&asset_id, false).is_none());
         self.internal_set_asset(&asset_id, Asset::new());
     }
 
@@ -41,11 +41,18 @@ impl Contract {
     }
 
     #[payable]
+    pub fn set_asset_status(&mut self, asset_id: AssetId, status: AssetStatus) {
+        assert_one_yocto();
+        self.assert_owner();
+        self.internal_set_asset_status(asset_id, status);
+    }
+
+    #[payable]
     pub fn add_asset_ema(&mut self, asset_id: AssetId, period_sec: DurationSec) {
         assert_one_yocto();
         self.assert_owner();
         let mut asset = self
-            .internal_get_asset(&asset_id)
+            .internal_get_asset(&asset_id, false)
             .expect("Missing an asset");
         if asset.emas.iter().any(|ema| ema.period_sec == period_sec) {
             panic!("EMA for this period already exists");
@@ -59,7 +66,7 @@ impl Contract {
         assert_one_yocto();
         self.assert_owner();
         let mut asset = self
-            .internal_get_asset(&asset_id)
+            .internal_get_asset(&asset_id, false)
             .expect("Missing an asset");
         let last_num_emas = asset.emas.len();
         asset.emas.retain(|ema| ema.period_sec != period_sec);
