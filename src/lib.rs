@@ -18,7 +18,7 @@ use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{
     assert_one_yocto, env, ext_contract, log, near_bindgen, AccountId, Balance, BorshStorageKey,
-    Duration, Gas, PanicOnDefault, Promise, Timestamp,
+    Duration, Gas, PanicOnDefault, Promise, Timestamp, ONE_NEAR,
 };
 
 const NO_DEPOSIT: Balance = 0;
@@ -26,6 +26,8 @@ const NO_DEPOSIT: Balance = 0;
 const GAS_FOR_PROMISE: Gas = Gas(Gas::ONE_TERA.0 * 10);
 
 const NEAR_CLAIM_DURATION: Duration = 24 * 60 * 60 * 10u64.pow(9);
+// This is a safety margin in NEAR for to cover potential extra storage.
+const SAFETY_MARGIN_NEAR_CLAIM: Balance = ONE_NEAR;
 
 pub type DurationSec = u32;
 
@@ -192,7 +194,7 @@ impl Contract {
         }
     }
 
-    pub fn report_prices(&mut self, prices: Vec<AssetPrice>) {
+    pub fn report_prices(&mut self, prices: Vec<AssetPrice>, claim_near: Option<bool>) {
         assert!(!prices.is_empty());
         let oracle_id = env::predecessor_account_id();
         let timestamp = env::block_timestamp();
@@ -202,7 +204,12 @@ impl Contract {
         oracle.last_report = timestamp;
         oracle.price_reports += prices.len() as u64;
 
-        if oracle.last_near_claim + NEAR_CLAIM_DURATION <= timestamp {
+        let liquid_balance = env::account_balance() + env::account_locked_balance()
+            - env::storage_byte_cost() * u128::from(env::storage_usage());
+        if claim_near.unwrap_or(false)
+            && liquid_balance > self.near_claim_amount + SAFETY_MARGIN_NEAR_CLAIM
+            && oracle.last_near_claim + NEAR_CLAIM_DURATION <= timestamp
+        {
             oracle.last_near_claim = timestamp;
             Promise::new(oracle_id.clone()).transfer(self.near_claim_amount);
         }
