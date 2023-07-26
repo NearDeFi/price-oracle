@@ -204,14 +204,14 @@ impl Contract {
         oracle.last_report = timestamp;
         oracle.price_reports += prices.len() as u64;
 
-        let liquid_balance = env::account_balance() + env::account_locked_balance()
-            - env::storage_byte_cost() * u128::from(env::storage_usage());
-        if claim_near.unwrap_or(false)
-            && liquid_balance > self.near_claim_amount + SAFETY_MARGIN_NEAR_CLAIM
-            && oracle.last_near_claim + NEAR_CLAIM_DURATION <= timestamp
+        if claim_near.unwrap_or(false) && oracle.last_near_claim + NEAR_CLAIM_DURATION <= timestamp
         {
-            oracle.last_near_claim = timestamp;
-            Promise::new(oracle_id.clone()).transfer(self.near_claim_amount);
+            let liquid_balance = env::account_balance() + env::account_locked_balance()
+                - env::storage_byte_cost() * u128::from(env::storage_usage());
+            if liquid_balance > self.near_claim_amount + SAFETY_MARGIN_NEAR_CLAIM {
+                oracle.last_near_claim = timestamp;
+                Promise::new(oracle_id.clone()).transfer(self.near_claim_amount);
+            }
         }
 
         self.internal_set_oracle(&oracle_id, oracle);

@@ -1,6 +1,6 @@
 # Upgrade through DAO
 
-export CONTRACT_HASH="4fsBRaW7h43pn4TDhenf4MoCsNaXLGrQwpVwM3ZysF97"
+export CONTRACT_HASH="4sUttxKK4gJpWr1mhfNddBt497ZiXsRMbTYvCeQQbjR2"
 
 near call $DAO_ACCOUNT_ID store_blob --base64 (base64 res/price_oracle.wasm) --accountId=$ACCOUNT_ID --amount=2.22 --gas=100000000000000
 
