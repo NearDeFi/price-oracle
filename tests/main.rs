@@ -7,11 +7,11 @@ use price_oracle::{AssetId, AssetPrice, DurationSec, Price, PriceData};
 
 near_sdk_sim::lazy_static_include::lazy_static_include_bytes! {
     CONTARCT_WASM_BYTES => "res/price_oracle.wasm",
-    CONTRACT_0_4_0_WASM_BYTES => "res/price_oracle_0.4.0.wasm",
+    CONTRACT_0_5_0_WASM_BYTES => "res/price_oracle_0.5.0.wasm",
 }
 
-const PREVIOUS_VERSION: &'static str = "0.4.0";
-const LATEST_VERSION: &'static str = "0.5.0";
+const PREVIOUS_VERSION: &'static str = "0.5.0";
+const LATEST_VERSION: &'static str = "0.6.0";
 
 pub const DEFAULT_GAS: Gas = Gas(Gas::ONE_TERA.0 * 15);
 pub const MAX_GAS: Gas = Gas(Gas::ONE_TERA.0 * 300);
@@ -211,6 +211,145 @@ pub fn test_basic() {
 }
 
 #[test]
+pub fn test_claim_near() {
+    let e = Env::setup(&CONTARCT_WASM_BYTES);
+
+    e.add_oracle(&e.users[0]);
+    e.add_oracle(&e.users[1]);
+    e.add_oracle(&e.users[2]);
+
+    e.add_asset(WRAP_NEAR);
+
+    let initial_balance = e.users[0].account().unwrap().amount;
+    e.make_reports(&[100000, 110000, 106000]);
+    let balance = e.users[0].account().unwrap().amount;
+    // No refund by default
+    assert!(initial_balance - balance < to_yocto("0.01"));
+
+    let price_data = e.get_price_data(None);
+    assert_eq!(price_data.prices.len(), 1);
+    assert_eq!(&price_data.prices[0].asset_id, WRAP_NEAR);
+    assert_eq!(
+        &price_data.prices[0].price,
+        &Some(Price {
+            multiplier: 106000,
+            decimals: 28
+        })
+    );
+
+    let initial_balance = balance;
+
+    e.users[0]
+        .call(
+            e.contract.account_id(),
+            "report_prices",
+            &json!({
+                "prices": vec![AssetPrice {
+                    asset_id: WRAP_NEAR.to_string(),
+                    price: Price {
+                        multiplier: 108000,
+                        decimals: 28,
+                    },
+                }],
+                "claim_near": true,
+            })
+            .to_string()
+            .into_bytes(),
+            MAX_GAS.0,
+            0,
+        )
+        .assert_success();
+
+    let balance = e.users[0].account().unwrap().amount;
+    // Received refund
+    assert!(balance - initial_balance > to_yocto("4.99"));
+
+    let price_data = e.get_price_data(None);
+    assert_eq!(price_data.prices.len(), 1);
+    assert_eq!(&price_data.prices[0].asset_id, WRAP_NEAR);
+    assert_eq!(
+        &price_data.prices[0].price,
+        &Some(Price {
+            multiplier: 108000,
+            decimals: 28
+        })
+    );
+}
+
+#[test]
+pub fn test_claim_near_no_oracle_balance() {
+    let e = Env::setup(&CONTARCT_WASM_BYTES);
+
+    e.add_oracle(&e.users[0]);
+    e.add_oracle(&e.users[1]);
+    e.add_oracle(&e.users[2]);
+
+    e.add_asset(WRAP_NEAR);
+
+    e.contract.transfer(
+        e.users[0].account_id(),
+        e.contract.account().unwrap().amount - to_yocto("6"),
+    );
+    let contract_balance = e.contract.account().unwrap().amount;
+    assert!(contract_balance <= to_yocto("6"));
+
+    let initial_balance = e.users[0].account().unwrap().amount;
+    e.make_reports(&[100000, 110000, 106000]);
+    let balance = e.users[0].account().unwrap().amount;
+    // No refund by default
+    assert!(initial_balance - balance < to_yocto("0.01"));
+
+    let price_data = e.get_price_data(None);
+    assert_eq!(price_data.prices.len(), 1);
+    assert_eq!(&price_data.prices[0].asset_id, WRAP_NEAR);
+    assert_eq!(
+        &price_data.prices[0].price,
+        &Some(Price {
+            multiplier: 106000,
+            decimals: 28
+        })
+    );
+
+    let initial_balance = balance;
+
+    e.users[0]
+        .call(
+            e.contract.account_id(),
+            "report_prices",
+            &json!({
+                "prices": vec![AssetPrice {
+                    asset_id: WRAP_NEAR.to_string(),
+                    price: Price {
+                        multiplier: 108000,
+                        decimals: 28,
+                    },
+                }],
+                "claim_near": true,
+            })
+            .to_string()
+            .into_bytes(),
+            MAX_GAS.0,
+            0,
+        )
+        .assert_success();
+
+    let balance = e.users[0].account().unwrap().amount;
+    // Still didn't receive the rebate, because there is not enough liquid balance.
+    assert!(initial_balance - balance < to_yocto("0.01"));
+
+    let price_data = e.get_price_data(None);
+    assert_eq!(price_data.prices.len(), 1);
+    assert_eq!(&price_data.prices[0].asset_id, WRAP_NEAR);
+    assert_eq!(
+        &price_data.prices[0].price,
+        &Some(Price {
+            multiplier: 108000,
+            decimals: 28
+        })
+    );
+}
+
+#[test]
 pub fn test_ema() {
     let e = Env::setup(&CONTARCT_WASM_BYTES);
 
@@ -351,7 +490,7 @@ pub fn test_ema() {
 
 #[test]
 pub fn test_update() {
-    let e = Env::setup(&CONTRACT_0_4_0_WASM_BYTES);
+    let e = Env::setup(&CONTRACT_0_5_0_WASM_BYTES);
 
     e.add_oracle(&e.users[0]);
     e.add_oracle(&e.users[1]);
